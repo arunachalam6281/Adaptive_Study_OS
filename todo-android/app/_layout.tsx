@@ -1,9 +1,9 @@
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
-export default function Layout() {
+export default function RootLayout() {
   return (
-    <Tabs>
+    <Tabs screenOptions={{ headerShown: true }}>
       <Tabs.Screen
         name="todos"
         options={{
@@ -13,7 +13,6 @@ export default function Layout() {
           ),
         }}
       />
-
       <Tabs.Screen
         name="leetcode"
         options={{

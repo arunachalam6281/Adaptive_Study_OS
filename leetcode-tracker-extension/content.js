@@ -1,66 +1,70 @@
 (function () {
-  console.log("LeetCode Tracker loaded");
+  "use strict";
 
-  const API = "https://matrix-production-d793.up.railway.app/api/leetcode/event";
+  // ─── Configuration ───────────────────────────────────────────────────────────
+  // Switch to local URL during development:
+  const API_URL = "http://localhost:8080/api/leetcode/event";
+  // const API_URL = "https://matrix-production-d793.up.railway.app/api/leetcode/event";
+console.log(API_URL);
+  const SUBMISSION_RESULT_SELECTOR = '[data-e2e-locator="submission-result"]';
+  const PROBLEM_LINK_SELECTOR = 'a[href^="/problems/"]';
 
-  // remember last submission to prevent duplicates
-  let lastSubmissionKey = null;
+  // ─── Dedup ───────────────────────────────────────────────────────────────────
+  // Use a Set so every unique key is tracked for the lifetime of the page.
+  const sentKeys = new Set();
 
-  const sendEvent = async (payload) => {
+  // ─── API ─────────────────────────────────────────────────────────────────────
+  async function sendEvent(payload) {
     try {
-      await fetch(API, {
+      const res = await fetch(API_URL, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-
-      console.log("Event sent:", payload);
+      if (!res.ok) {
+        console.warn("[Matrix] Event rejected by server:", res.status);
+        return;
+      }
+      console.log("Sending Event");
+      console.log("[Matrix] Event sent:", payload.eventType, payload.problemName);
     } catch (e) {
-      console.error("Failed to send event:", e);
+      console.error("[Matrix] Failed to send event:", e);
+      console.error("[Matrix] API URL:", API_URL);
     }
-  };
+  }
 
-  const detectSubmission = () => {
+  // ─── Submission observer ─────────────────────────────────────────────────────
+  function observeSubmissions() {
     const observer = new MutationObserver(() => {
+      const resultEl = document.querySelector(SUBMISSION_RESULT_SELECTOR);
+      if (!resultEl) return;
 
-      const result = document.querySelector('[data-e2e-locator="submission-result"]');
-      if (!result) return;
-
-      const status = result.innerText.trim();
+      const status = resultEl.innerText.trim();
       if (!status) return;
 
-      const title =
-        document.querySelector('a[href^="/problems/"]')?.innerText ||
+      const problemName =
+        document.querySelector(PROBLEM_LINK_SELECTOR)?.innerText?.trim() ||
         document.title;
 
-      const url = window.location.href;
+      const problemUrl = window.location.href;
+      const eventTime = new Date().toISOString();
 
-      const submissionKey = title + "_" + status;
-
-      // ignore duplicates
-      if (submissionKey === lastSubmissionKey) return;
-
-      lastSubmissionKey = submissionKey;
-
-      console.log("Submission detected:", status);
+      // Deduplicate: same problem + same status counts as one event per page load
+      const key = `${problemName}__${status}`;
+      if (sentKeys.has(key)) return;
+      sentKeys.add(key);
 
       sendEvent({
         eventType: "SUBMISSION",
-        problemName: title,
+        problemName,
         status,
-        problemUrl: url,
-        eventTime: new Date().toISOString(),
+        problemUrl,
+        eventTime,
       });
-
     });
 
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-    });
-  };
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
 
-  detectSubmission();
+  observeSubmissions();
 })();
